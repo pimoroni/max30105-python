@@ -1,0 +1,4 @@
+[run]
+source = max30105
+omit =
+    .tox/*
