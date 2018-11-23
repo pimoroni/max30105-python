@@ -86,6 +86,7 @@ class MAX30105:
         self._is_setup = False
         self._i2c_addr = i2c_addr
         self._i2c_dev = i2c_dev
+        self._active_leds = 0
         self._max30105 = Device(I2C_ADDRESS, i2c_dev=self._i2c_dev, bit_width=8, registers=(
             Register('INT_STATUS_1', 0x00, fields=(
                 BitField('a_full', bit(7)),
@@ -111,7 +112,7 @@ class MAX30105:
                 BitField('pointer', 0b00011111),
             )),
             # Counts the number of samples lost up to 0xf
-            Register('OVERFLOW', 0x05, fields=(
+            Register('FIFO_OVERFLOW', 0x05, fields=(
                 BitField('counter', 0b00011111),
             )),
             # Points to read location in FIFO
@@ -119,13 +120,13 @@ class MAX30105:
                 BitField('pointer', 0b00011111),
             )),
             # FIFO data, 3 bytes per channel
-            Register('FIFO', 0x07, fields=(
-                BitField('channel0', 0x3fffff << 0),
-                BitField('channel1', 0x3fffff << (8 * 9 * 1)),
-                BitField('channel2', 0x3fffff << (8 * 9 * 2)),
-            ), bit_width=8 * 9 * 3),
+            #Register('FIFO', 0x07, fields=(
+            #    BitField('channel0', 0x3fffff << 0),
+            #    BitField('channel1', 0x3fffff << (8 * 9 * 1)),
+            #    BitField('channel2', 0x3fffff << (8 * 9 * 2)),
+            #), bit_width=8 * 9 * 3),
             Register('FIFO_CONFIG', 0x08, fields=(
-                BitField('smp_average', 0b111000000, adapter=LookupAdapter({
+                BitField('sample_average', 0b111000000, adapter=LookupAdapter({
                     1: 0b000,
                     2: 0b001,
                     4: 0b010,
@@ -152,7 +153,7 @@ class MAX30105:
                     8192: 0b10,
                     16384: 0b11
                 })),
-                BitField('sample_rate_sps', 0b00011000, adapter=LookupAdapter({
+                BitField('sample_rate_sps', 0b00011100, adapter=LookupAdapter({
                     50: 0b000,
                     100: 0b001,
                     200: 0b010,
@@ -199,18 +200,87 @@ class MAX30105:
             ), bit_width=16)
         ))
 
-    def setup(self):
+    def setup(self, led_power=6.4, sample_average=4, leds_enable=3, sample_rate=400, pulse_width=215, adc_range=16384):
         if self._is_setup:
             return
         self._is_setup = True
 
-        with self._max30105.LED_PULSE_AMPLITUDE as leds:
-            leds.set_led1_mA(10)
-            leds.set_led2_mA(10)
-            leds.set_led3_mA(10)
-            leds.write()
+        self._active_leds = leds_enable
 
         self._max30105.select_address(self._i2c_addr)
+
+        self.soft_reset()
+
+        with self._max30105.FIFO_CONFIG as FIFO_CONFIG:
+            # Average over 4 samples (the default value)
+            FIFO_CONFIG.set_sample_average(sample_average)
+            # Enable sample rollover
+            FIFO_CONFIG.set_fifo_rollover_en(True)
+            FIFO_CONFIG.write()
+
+        with self._max30105.SPO2_CONFIG as SPO2_CONFIG:
+            # Set the sample rate to 50 samples per second
+            SPO2_CONFIG.set_sample_rate_sps(sample_rate)
+            # And the ADC range to 16384
+            SPO2_CONFIG.set_adc_range_nA(adc_range)
+            # And the pulse width to 411us
+            SPO2_CONFIG.set_led_pw_us(pulse_width)
+            SPO2_CONFIG.write()
+
+        with self._max30105.LED_PULSE_AMPLITUDE as LPA:
+            LPA.set_led1_mA(led_power)
+            LPA.set_led2_mA(led_power)
+            LPA.set_led3_mA(led_power)
+            LPA.write()
+
+        self._max30105.LED_PROX_PULSE_AMPLITUDE.set_pilot_mA(led_power)
+
+        # Set the LED mode based on the number of LEDs we want enabled
+        self._max30105.MODE_CONFIG.set_mode(['red_only', 'red_ir', 'green_red_ir'][leds_enable - 1])
+
+        # Set up the LEDs requested in sequential slots
+        with self._max30105.LED_MODE_CONTROL as LMC:
+            LMC.set_slot1('red')
+            if leds_enable >= 2:
+                LMC.set_slot2('ir')
+            if leds_enable >= 3:
+                LMC.set_slot3('green')
+            LMC.write()
+
+        self.clear_fifo()
+
+    def soft_reset(self):
+        self._max30105.MODE_CONFIG.set_reset(True)
+        while self._max30105.MODE_CONFIG.get_reset():
+            time.sleep(0.001)
+
+    def clear_fifo(self):
+        self._max30105.FIFO_READ.set_pointer(0)
+        self._max30105.FIFO_WRITE.set_pointer(0)
+        self._max30105.FIFO_OVERFLOW.set_counter(0)
+
+    def get_samples(self):
+        ptr_r = self._max30105.FIFO_READ.get_pointer()
+        ptr_w = self._max30105.FIFO_WRITE.get_pointer()
+
+        if ptr_r == ptr_w:
+            return None
+
+        sample_count = ptr_w - ptr_r
+        if sample_count < 0:
+            sample_count = 32
+
+        byte_count = sample_count * 3 * self._active_leds
+
+        data = []
+
+        while byte_count > 0:
+            data += self._max30105._i2c.read_i2c_block_data(self._i2c_addr, 0x07, min(byte_count, 32))
+            byte_count -= 32
+
+        self.clear_fifo()
+
+        return data
 
     def get_chip_id(self):
         self.setup()

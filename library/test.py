@@ -2,20 +2,30 @@ import max30105
 import time
 
 m = max30105.MAX30105()
+m.setup()
 
 print(m.get_temperature())
 
-m._max30105.MODE_CONFIG.set_mode('green_red_ir')
+m._max30105.LED_PULSE_AMPLITUDE.set_led3_mA(0)
+m._max30105.LED_PULSE_AMPLITUDE.set_led1_mA(0.2)
+m._max30105.FIFO_CONFIG.set_fifo_almost_full(1)
+m._max30105.INT_ENABLE_1.set_a_full_en(True)
+m._max30105.INT_STATUS_1.set_a_full(False)
 
-m._max30105.SPO2_CONFIG.set_adc_range_nA(2048)
-m._max30105.SPO2_CONFIG.set_sample_rate_sps(1000)
-m._max30105.LED_MODE_CONTROL.set_slot1('red')
-m._max30105.LED_MODE_CONTROL.set_slot2('ir')
-m._max30105.LED_MODE_CONTROL.set_slot3('green')
+ir_min = 500
+ir_max = 0
 
 while True:
-    for x in range(32):
-        with m._max30105.FIFO as fifo:
-            data = fifo.get_channel0(), fifo.get_channel1(), fifo.get_channel2()
-            print('{:02d}: {:05d} {:05d} {:05d}'.format(x, *data))
-    time.sleep(0.5)
+    samples = m.get_samples()
+    if samples is not None:
+        # print(samples)
+        ir = samples[5]
+        if ir < ir_min:
+            ir_min = ir
+        if ir > ir_max:
+            ir_max = ir
+        if ir_max != ir_min: 
+            val = float(ir - ir_min) / (ir_max - ir_min)
+            print("#" * int(val * 60))
+    time.sleep(1.0 / 100)  # 400sps 4 sample averaging = 100sps
+    
