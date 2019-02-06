@@ -152,30 +152,43 @@ class HeartRate:
 
         return beat_detected
 
-    def on_beat(self, handler, average_over=4):
+    def on_beat(self, handler, average_over=4, delay=0.5):
         """Watch for heartbeat and call a function on every beat.
         
-        :param handler: Function to call, should accept bpm and bpm_avg arguments
+        :param handler: Function to call, should accept beat_detected, bpm and bpm_avg arguments
         :param average_over: Number of samples to average over
         
         """
         bpm_vals = [0 for x in range(average_over)]
         last_beat = time.time()
+        last_update = time.time()
+        bpm = 0
+        bpm_avg = 0
+        beat_detected = False
 
         while True:
-            samples = self.max30105.get_samples()
+            t = time.time()
 
-            for sample in samples:
+            samples = self.max30105.get_samples()
+            if samples is None:
+                continue
+
+            for sample_index in range(0, len(samples), 2):
+                sample = samples[sample_index + 1]
                 if self.check_for_beat(sample):
-                    t = time.time()
+                    beat_detected = True
                     delta = t - last_beat
                     last_beat = t
                     bpm = 60 / delta
                     bpm_vals = bpm_vals[1:] + [bpm]
                     bpm_avg = sum(bpm_vals) / average_over
 
-                    if handler(bpm, bpm_avg):
-                        return
+            
+            if t - last_update >= delay:
+                if handler(beat_detected, bpm, bpm_avg):
+                    return
+                beat_detected = False
+                last_update = t
 
 
 class MAX30105:
