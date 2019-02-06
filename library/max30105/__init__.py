@@ -29,7 +29,7 @@ class LEDModeAdapter(Adapter):
             return self.LOOPUP[value]
         except IndexError:
             return 'off'
-    
+
     def _encode(self, value):
         try:
             return self.LOOKUP.index(value)
@@ -154,10 +154,10 @@ class HeartRate:
 
     def on_beat(self, handler, average_over=4, delay=0.5):
         """Watch for heartbeat and call a function on every beat.
-        
+
         :param handler: Function to call, should accept beat_detected, bpm and bpm_avg arguments
         :param average_over: Number of samples to average over
-        
+
         """
         bpm_vals = [0 for x in range(average_over)]
         last_beat = time.time()
@@ -183,7 +183,6 @@ class HeartRate:
                     bpm_vals = bpm_vals[1:] + [bpm]
                     bpm_avg = sum(bpm_vals) / average_over
 
-            
             if t - last_update >= delay:
                 if handler(beat_detected, bpm, bpm_avg):
                     return
@@ -229,12 +228,6 @@ class MAX30105:
             Register('FIFO_READ', 0x06, fields=(
                 BitField('pointer', 0b00011111),
             )),
-            # FIFO data, 3 bytes per channel
-            #Register('FIFO', 0x07, fields=(
-            #    BitField('channel0', 0x3fffff << 0),
-            #    BitField('channel1', 0x3fffff << (8 * 9 * 1)),
-            #    BitField('channel2', 0x3fffff << (8 * 9 * 2)),
-            #), bit_width=8 * 9 * 3),
             Register('FIFO_CONFIG', 0x08, fields=(
                 BitField('sample_average', 0b111000000, adapter=LookupAdapter({
                     1: 0b000,
@@ -415,13 +408,13 @@ class MAX30105:
 
         self._max30105.DIE_TEMP_CONFIG.set_temp_en(True)
         self._max30105.INT_ENABLE_2.set_die_temp_ready_en(True)
-        while self._max30105.INT_STATUS_2.get_die_temp_ready() == False:
+        while not self._max30105.INT_STATUS_2.get_die_temp_ready():
             time.sleep(0.01)
         return self._max30105.DIE_TEMP.get_temperature()
 
     def set_mode(self, mode):
         """Set the sensor mode.
-        
+
         :param mode: Mode, either red_only, red_ir or green_red_ir
 
         """
@@ -429,10 +422,10 @@ class MAX30105:
 
     def set_slot_mode(self, slot, mode):
         """Set the mode of a single slot.
-        
+
         :param slot: Slot to set, either 1, 2, 3 or 4
         :param mode: Mode, either off, red, ir, green, pilot_red, pilot_ir or pilot_green
-        
+
         """
         if slot == 1:
             self._max30105.LED_MODE_CONTROL.set_slot1(mode)
@@ -487,41 +480,41 @@ class MAX30105:
 
     def set_proximity_threshold(self, value):
         """Set the threshold of the proximity sensor.
-        
+
         Sets the infra-red ADC count that will trigger the start of particle-sensing mode.
 
         :param value: threshold value from 0 to 255
-        
+
         """
         self._max30105.PROX_INT_THRESHOLD.set_threshold(value)
 
     def get_fifo_almost_full_status(self):
         """Get the FIFO-almost-full flag.
-        
+
         This interrupt is set when the FIFO write pointer has N free spaces remaining, as defined in `set_fifo_almost_full_count`.
 
         The flag is cleared upon read.
-        
+
         """
         return self._max30105.INT_STATUS_1.get_a_full()
 
     def get_data_ready_status(self):
         """Get the data-ready flag.
-        
+
         In particle-sensing mode this interrupt triggeres when a new sample has been placed into the FIFO.
 
         This flag is cleared upon read, or upon `get_samples()`
-        
+
         """
         return self._max30105.INT_STATUS_1.get_data_ready()
 
     def get_ambient_light_compensation_overflow_status(self):
         """Get the ambient light compensation overflow status flag.
-        
+
         Returns True if the ALC has reached its limit, and ambient light is affecting the output of the ADC.
 
         This flag is cleared upon read.
-        
+
         """
         return self._max30105.INT_STATUS_1.get_data_ready()
 
