@@ -57,4 +57,3 @@ while True:
         #    print("#" * int(d * 60))
         print("#" * int(d / 2))
     time.sleep(1.0 / 100)  # 400sps 4 sample averaging = 100sps
-    
