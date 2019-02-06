@@ -33,6 +33,7 @@ offset = 0
 
 fir_coeffs = [172, 321, 579, 927, 1360, 1858, 2390, 2916, 3391, 3768, 4012, 4096]
 
+
 def low_pass_fir(sample):
     global offset
 
@@ -40,17 +41,19 @@ def low_pass_fir(sample):
     z = fir_coeffs[11] * buf[(offset - 11) & 0x1f]
 
     for i in range(11):
-        z += fir_coeffs[i] * ( buf[(offset - i) & 0x1f] + buf[(offset - 22 + i) & 0x1f] )
+        z += fir_coeffs[i] * (buf[(offset - i) & 0x1f] + buf[(offset - 22 + i) & 0x1f])
 
     offset += 1
     offset %= 32
     return z >> 15
+
 
 def average_dc_estimator(sample):
     global ir_avg
 
     ir_avg += (((sample << 15) - ir_avg) >> 4)
     return ir_avg >> 15
+
 
 def check_for_beat(sample):
     global ir_current, pos_edge, neg_edge, ir_signal_min, ir_signal_max
@@ -82,6 +85,7 @@ def check_for_beat(sample):
         ir_signal_min = ir_current
 
     return beat_detected
+
 
 bpm = 0
 bpm_avg = 0
