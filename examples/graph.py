@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import time
 from max30105 import MAX30105, HeartRate
 
 max30105 = MAX30105()
@@ -13,14 +14,19 @@ max30105.set_slot_mode(2, 'ir')
 max30105.set_slot_mode(3, 'off')
 max30105.set_slot_mode(4, 'off')
 
-def display_heartrate(beat, bpm, avg_bpm):
-    print("{} BPM: {:.2f}  AVG: {:.2f}".format("<3" if beat else "  ", bpm, avg_bpm))
-
 hr = HeartRate(max30105)
 
-print("Getting heartrate, please wait...")
-
 try:
-    hr.on_beat(display_heartrate, average_over=4)
+    while True:
+        samples = max30105.get_samples()
+        if samples is not None:
+            for i in range(0, len(samples), 2):
+                # Process the least significant byte, where most wiggling happens
+                ir = samples[i + 1] & 0xff
+                d = hr.low_pass_fir(ir)
+
+            print("#" * int(d / 2))
+            time.sleep(1.0 / 100)  # 400sps 4 sample averaging = 100sps
+
 except KeyboardInterrupt:
     pass
