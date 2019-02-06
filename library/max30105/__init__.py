@@ -280,7 +280,11 @@ class MAX30105:
 
         self.clear_fifo()
 
-        return data
+        result = []
+        for x in range(0, len(data), 3):
+            result.append((data[x] << 16) | (data[x + 1] << 8) | data[x + 2])
+
+        return result
 
     def get_chip_id(self):
         self.setup()
