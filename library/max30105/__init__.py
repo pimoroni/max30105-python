@@ -81,6 +81,103 @@ class SampleAdapter(Adapter):
         return struct.unpack('<LLL', b)
 
 
+class HeartRate:
+    def __init__(self, max30105):
+        """Initialise HeartRate detector.
+
+        :param max30105: Instance of a max30105 sensor to read from.
+
+        """
+        self.max30105 = max30105
+        self.ir_current = 0
+        self.ir_min = -20
+        self.ir_max = 20
+        self.ir_avg = 0
+
+        self.ir_signal_min = 0
+        self.ir_signal_max = 0
+
+        self.pos_edge = 0
+        self.neg_edge = 0
+
+        self.buf = [0 for x in range(32)]
+        self.offset = 0
+
+        self.fir_coeffs = [172, 321, 579, 927, 1360, 1858, 2390, 2916, 3391, 3768, 4012, 4096]
+
+    def low_pass_fir(self, sample):
+        """Filter a sample using a low-pass FIR filter with a 32 sample buffer."""
+        self.buf[self.offset] = sample
+        z = self.fir_coeffs[11] * self.buf[(self.offset - 11) & 0x1f]
+
+        for i in range(11):
+            z += self.fir_coeffs[i] * (self.buf[(self.offset - i) & 0x1f] + self.buf[(self.offset - 22 + i) & 0x1f])
+
+        self.offset += 1
+        self.offset %= 32
+        return z >> 15
+
+    def average_dc_estimator(self, sample):
+        """Estimate the average DC."""
+        self.ir_avg += (((sample << 15) - self.ir_avg) >> 4)
+        return self.ir_avg >> 15
+
+    def check_for_beat(self, sample):
+        """Check for a single beat."""
+        beat_detected = False
+        ir_previous = self.ir_current
+        ir_avg_est = self.average_dc_estimator(sample)
+        self.ir_current = self.low_pass_fir(sample - ir_avg_est)
+
+        if ir_previous < 0 and self.ir_current >= 0:
+            self.ir_max = self.ir_signal_max
+            self.ir_min = self.ir_signal_min
+            self.pos_edge = 1
+            self.neg_edge = 0
+            self.ir_signal_max = 0
+
+            if (self.ir_max - self.ir_min) > 20 and (self.ir_max - self.ir_min) < 1000:
+                beat_detected = True
+
+        if ir_previous > 0 and self.ir_current <= 0:
+            self.pos_edge = 0
+            self.neg_edge = 1
+            self.ir_signal_min = 0
+
+        if self.pos_edge and self.ir_current > ir_previous:
+            self.ir_signal_max = self.ir_current
+
+        if self.neg_edge and self.ir_current > ir_previous:
+            self.ir_signal_min = self.ir_current
+
+        return beat_detected
+
+    def on_beat(self, handler, average_over=4):
+        """Watch for heartbeat and call a function on every beat.
+        
+        :param handler: Function to call, should accept bpm and bpm_avg arguments
+        :param average_over: Number of samples to average over
+        
+        """
+        bpm_vals = [0 for x in range(average_over)]
+        last_beat = time.time()
+
+        while True:
+            samples = self.max30105.get_samples()
+
+            for sample in samples:
+                if self.check_for_beat(sample):
+                    t = time.time()
+                    delta = t - last_beat
+                    last_beat = t
+                    bpm = 60 / delta
+                    bpm_vals = bpm_vals[1:] + [bpm]
+                    bpm_avg = sum(bpm_vals) / average_over
+
+                    if handler(bpm, bpm_avg):
+                        return
+
+
 class MAX30105:
     def __init__(self, i2c_addr=I2C_ADDRESS, i2c_dev=None):
         self._is_setup = False
@@ -201,6 +298,7 @@ class MAX30105:
         ))
 
     def setup(self, led_power=6.4, sample_average=4, leds_enable=3, sample_rate=400, pulse_width=215, adc_range=16384):
+        """Set up the sensor."""
         if self._is_setup:
             return
         self._is_setup = True
@@ -250,16 +348,19 @@ class MAX30105:
         self.clear_fifo()
 
     def soft_reset(self):
+        """Reset device."""
         self._max30105.MODE_CONFIG.set_reset(True)
         while self._max30105.MODE_CONFIG.get_reset():
             time.sleep(0.001)
 
     def clear_fifo(self):
+        """Clear samples FIFO."""
         self._max30105.FIFO_READ.set_pointer(0)
         self._max30105.FIFO_WRITE.set_pointer(0)
         self._max30105.FIFO_OVERFLOW.set_counter(0)
 
     def get_samples(self):
+        """Return contents of sample FIFO."""
         ptr_r = self._max30105.FIFO_READ.get_pointer()
         ptr_w = self._max30105.FIFO_WRITE.get_pointer()
 
@@ -287,6 +388,7 @@ class MAX30105:
         return result
 
     def get_chip_id(self):
+        """Return the revision and part IDs."""
         self.setup()
 
         revision = self._max30105.PART_ID.get_revision()
@@ -295,6 +397,7 @@ class MAX30105:
         return revision, part
 
     def get_temperature(self):
+        """Return the die temperature."""
         self.setup()
 
         self._max30105.DIE_TEMP_CONFIG.set_temp_en(True)
@@ -302,3 +405,137 @@ class MAX30105:
         while self._max30105.INT_STATUS_2.get_die_temp_ready() == False:
             time.sleep(0.01)
         return self._max30105.DIE_TEMP.get_temperature()
+
+    def set_mode(self, mode):
+        """Set the sensor mode.
+        
+        :param mode: Mode, either red_only, red_ir or green_red_ir
+
+        """
+        self._max30105.MODE_CONFIG.set_mode(mode)
+
+    def set_slot_mode(self, slot, mode):
+        """Set the mode of a single slot.
+        
+        :param slot: Slot to set, either 1, 2, 3 or 4
+        :param mode: Mode, either off, red, ir, green, pilot_red, pilot_ir or pilot_green
+        
+        """
+        if slot == 1:
+            self._max30105.LED_MODE_CONTROL.set_slot1(mode)
+        elif slot == 2:
+            self._max30105.LED_MODE_CONTROL.set_slot2(mode)
+        elif slot == 3:
+            self._max30105.LED_MODE_CONTROL.set_slot3(mode)
+        elif slot == 4:
+            self._max30105.LED_MODE_CONTROL.set_slot4(mode)
+        else:
+            raise ValueError("Invalid LED slot: {}".format(slot))
+
+    def set_led_pulse_amplitude(self, led, amplitude):
+        """Set the LED pulse amplitude in milliamps.
+
+        :param led: LED to set, either 1, 2 or 3
+        :param amplitude: LED amplitude in milliamps
+
+        """
+        if led == 1:
+            self._max30105.LED_PULSE_AMPLITUDE.set_led1_mA(amplitude)
+        elif led == 2:
+            self._max30105.LED_PULSE_AMPLITUDE.set_led2_mA(amplitude)
+        elif led == 3:
+            self._max30105.LED_PULSE_AMPLITUDE.set_led3_mA(amplitude)
+        else:
+            raise ValueError("Invalid LED: {}".format(led))
+
+    def set_fifo_almost_full_count(self, count):
+        """Set number of FIFO slots remaining for Almost Full trigger.
+
+        :param count: Count of remaining samples, from 0 to 15
+
+        """
+        self._max30105.FIFO_CONFIG.set_fifo_almost_full(count)
+
+    def set_fifo_almost_full_enable(self, value):
+        """Enable the FIFO-almost-full flag."""
+        self._max30105.INT_ENABLE_1.set_a_full_en(value)
+
+    def set_data_ready_enable(self, value):
+        """Enable the data-ready flag."""
+        self._max30105.INT_ENABLE_1.set_data_ready_en(value)
+
+    def set_ambient_light_compensation_overflow_enable(self, value):
+        """Enable the ambient light compensation overflow flag."""
+        self._max30105.INT_ENABLE_1.set_alc_overflow_en(value)
+
+    def set_proximity_enable(self, value):
+        """Enable the proximity interrupt flag."""
+        self._max30105.INT_ENABLE_1.set_prox_int_en(value)
+
+    def set_proximity_threshold(self, value):
+        """Set the threshold of the proximity sensor.
+        
+        Sets the infra-red ADC count that will trigger the start of particle-sensing mode.
+
+        :param value: threshold value from 0 to 255
+        
+        """
+        self._max30105.PROX_INT_THRESHOLD.set_threshold(value)
+
+    def get_fifo_almost_full_status(self):
+        """Get the FIFO-almost-full flag.
+        
+        This interrupt is set when the FIFO write pointer has N free spaces remaining, as defined in `set_fifo_almost_full_count`.
+
+        The flag is cleared upon read.
+        
+        """
+        return self._max30105.INT_STATUS_1.get_a_full()
+
+    def get_data_ready_status(self):
+        """Get the data-ready flag.
+        
+        In particle-sensing mode this interrupt triggeres when a new sample has been placed into the FIFO.
+
+        This flag is cleared upon read, or upon `get_samples()`
+        
+        """
+        return self._max30105.INT_STATUS_1.get_data_ready()
+
+    def get_ambient_light_compensation_overflow_status(self):
+        """Get the ambient light compensation overflow status flag.
+        
+        Returns True if the ALC has reached its limit, and ambient light is affecting the output of the ADC.
+
+        This flag is cleared upon read.
+        
+        """
+        return self._max30105.INT_STATUS_1.get_data_ready()
+
+    def get_proximity_triggered_threshold_status(self):
+        """Get the proximity triggered threshold status flag.
+
+        Returns True if the proximity threshold has been reached and particle-sensing mode has begun.
+
+        This flag is cleared upon read.
+
+        """
+        return self._max30105.INT_STATUS_1.get_prox_int()
+
+    def get_power_ready_status(self):
+        """Get the power ready status flag.
+
+        Returns True if the sensor has successfully powered up and is ready to collect data.
+
+        """
+        return self._max30105.INT_STATUS_1.get_pwr_ready()
+
+    def get_die_temp_ready_status(self):
+        """Get the die temperature ready flag.
+
+        Returns True if the die temperature value is ready to be read.
+
+        This flag is cleared upon read, or upon `get_temperature`.
+
+        """
+        return self._max30105.INT_STATUS_2.get_die_temp_ready()
