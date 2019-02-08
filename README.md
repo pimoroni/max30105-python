@@ -1,4 +1,4 @@
-# MAX30105 (Heart Rate / Oximeter / Smoke Sensor) Breakout
+# MAX30105 - Heart Rate, Oximeter, Smoke Sensor
 
 [![Build Status](https://travis-ci.com/pimoroni/max30105-python.svg?branch=master)](https://travis-ci.com/pimoroni/max30105-python)
 [![Coverage Status](https://coveralls.io/repos/github/pimoroni/max30105-python/badge.svg?branch=master)](https://coveralls.io/github/pimoroni/max30105-python?branch=master)
