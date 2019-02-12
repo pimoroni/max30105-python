@@ -24,7 +24,8 @@ print("""
 NOTE! This code should not be used for medical diagnosis. It's
 for fun/novelty use only, so bear that in mind while using it.
 
-This example shows your pulse (using plethysmography) as a histogram.
+This example shows your pulse (using photoplethysmography) as a
+histogram.
 
 It's best to hold the sensor against your fingertip (the fleshy side)
 using a piece of wire or a rubber band looped through the mounting
