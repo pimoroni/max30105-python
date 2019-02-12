@@ -19,3 +19,6 @@ Latest/development library from GitHub:
 * `cd max30105-python`
 * `sudo ./install.sh`
 
+# Important!
+
+**This code should not be used for medical diagnosis, as the basis for a real smoke or fire detector, or in life-critical situations. It's for fun/novelty use only, so bear that in mind while using it.**
