@@ -59,8 +59,6 @@ trigger detection of a change.
 
 Values are printed to the terminal and to a datestamped text
 file in the directory file_dir.
-
-
 """)
 
 delay = 10
