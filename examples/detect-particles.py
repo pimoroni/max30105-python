@@ -89,7 +89,7 @@ try:
                     detected = True
                 else:
                     detected = False
-                print("Value: {:.2f} Mean: {:.2f} Delta: {:.2f} \
+                print("Value: {:.2f} // Mean: {:.2f} // Delta: {:.2f} // \
 Change detected: {}".format(d, mean, delta, detected))
                 f.write("{:.2f},".format(d))
                 f.write("{:.2f},".format(mean))
