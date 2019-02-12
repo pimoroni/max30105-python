@@ -1,29 +1,21 @@
-MAX30105 Smoke & Pulse Sensor
-=============================
+# MAX30105 - Heart Rate, Oximeter, Smoke Sensor
 
-|Build Status| |Coverage Status| |PyPi Package| |Python Versions|
+[![Build Status](https://travis-ci.com/pimoroni/max30105-python.svg?branch=master)](https://travis-ci.com/pimoroni/max30105-python)
+[![Coverage Status](https://coveralls.io/repos/github/pimoroni/max30105-python/badge.svg?branch=master)](https://coveralls.io/github/pimoroni/max30105-python?branch=master)
+[![PyPi Package](https://img.shields.io/pypi/v/max30105.svg)](https://pypi.python.org/pypi/max30105)
+[![Python Versions](https://img.shields.io/pypi/pyversions/max30105.svg)](https://pypi.python.org/pypi/max30105)
 
-The MAX30105 is an optical sensor suitable for smoke detection and,
-surprisingly, also pulse (yes, your pulse) measurement.
+The MAX30105 is an precision optical sensor that can be used to measure heart rate, pulse oximetry (SPO2 / blood oxygen saturation), and smoke (and other particles).
 
-Installing
-==========
+# Installing
 
 Stable library from PyPi:
 
--  Just run ``sudo pip install max30105``
+* Just run `sudo pip install max30105`
 
 Latest/development library from GitHub:
 
--  ``git clone https://github.com/pimoroni/max30105-python``
--  ``cd max30105-python``
--  ``sudo ./install.sh``
+* `git clone https://github.com/pimoroni/max30105-python`
+* `cd max30105-python`
+* `sudo ./install.sh`
 
-.. |Build Status| image:: https://travis-ci.com/pimoroni/max30105-python.svg?branch=master
-   :target: https://travis-ci.com/pimoroni/max30105-python
-.. |Coverage Status| image:: https://coveralls.io/repos/github/pimoroni/max30105-python/badge.svg?branch=master
-   :target: https://coveralls.io/github/pimoroni/max30105-python?branch=master
-.. |PyPi Package| image:: https://img.shields.io/pypi/v/max30105.svg
-   :target: https://pypi.python.org/pypi/max30105
-.. |Python Versions| image:: https://img.shields.io/pypi/pyversions/max30105.svg
-   :target: https://pypi.python.org/pypi/max30105

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-printf "BMP280 Python Library: Installer\n\n"
+printf "MAX301015 Python Library: Installer\n\n"
 
 if [ $(id -u) -ne 0 ]; then
 	printf "Script must be run as root. Try 'sudo ./install.sh'\n"

@@ -1,59 +1,40 @@
-import max30105
+#!/usr/bin/env python
+
 import time
+from max30105 import MAX30105, HeartRate
 
-m = max30105.MAX30105()
-m.setup(leds_enable=2)
+max30105 = MAX30105()
+max30105.setup(leds_enable=3)
 
-print(m.get_temperature())
+max30105.set_led_pulse_amplitude(1, 0)
+max30105.set_led_pulse_amplitude(2, 0)
+max30105.set_led_pulse_amplitude(3, 0)
 
-m._max30105.LED_PULSE_AMPLITUDE.set_led3_mA(0)
-m._max30105.LED_PULSE_AMPLITUDE.set_led1_mA(0.2)
-m._max30105.LED_PULSE_AMPLITUDE.set_led2_mA(12.5)
-m._max30105.FIFO_CONFIG.set_fifo_almost_full(1)
-m._max30105.INT_ENABLE_1.set_a_full_en(True)
-m._max30105.INT_STATUS_1.set_a_full(False)
-m._max30105.LED_MODE_CONTROL.set_slot1('red')
-m._max30105.LED_MODE_CONTROL.set_slot2('ir')
-m._max30105.LED_MODE_CONTROL.set_slot3('off')
-m._max30105.LED_MODE_CONTROL.set_slot4('off')
+max30105.set_slot_mode(1, 'red')
+max30105.set_slot_mode(2, 'ir')
+max30105.set_slot_mode(3, 'green')
+max30105.set_slot_mode(4, 'off')
 
-ir_min = 50000
-ir_max = 0
+colours = {"red": 1, "ir": 2, "green": 3}
 
-buf = [0 for x in range(32)]
-offset = 0
+hr = HeartRate(max30105)
 
-fir_coeffs = [172, 321, 579, 927, 1360, 1858, 2390, 2916, 3391, 3768, 4012, 4096]
+try:
+    print("Temperature: {:.2f}".format(max30105.get_temperature()))
+    for c in colours:
+        print("\nLighting {} LED".format(c.upper()))
+        max30105.set_led_pulse_amplitude(colours[c], 12.5)
+        time.sleep(2.5)
+        print("Reading {} LED".format(c.upper()))
+        for i in range(20):
+            samples = max30105.get_samples()
+            if samples is not None:
+                ir = samples[colours[c] - 1] & 0xff
+                d = hr.low_pass_fir(ir)
+                print(d)
+                time.sleep(0.05)
+        max30105.set_led_pulse_amplitude(colours[c], 0.0)
+    print("\nTEST COMPLETE!!!")
 
-def low_pass_fir(sample):
-    global offset
-
-    buf[offset] = sample
-    z = fir_coeffs[11] * buf[(offset - 11) & 0x1f]
-
-    for i in range(11):
-        z += fir_coeffs[i] * ( buf[(offset - i) & 0x1f] + buf[(offset - 22 + i) & 0x1f] )
-
-    offset += 1
-    offset %= 32
-    return z >> 15
-
-while True:
-    samples = m.get_samples()
-    if samples is not None:
-        #print(samples)
-        ir = samples[1] & 0xff 
-        d = low_pass_fir(ir)
-        #d = ir
-        #print(d)
-        # print(samples)
-        #ir = samples[5]
-        if d < ir_min:
-            ir_min = d
-        if ir > ir_max:
-            ir_max = d
-        #if ir_max != ir_min: 
-        #    d = float(d - ir_min) / (ir_max - ir_min)
-        #    print("#" * int(d * 60))
-        print("#" * int(d / 2))
-    time.sleep(1.0 / 100)  # 400sps 4 sample averaging = 100sps
+except KeyboardInterrupt:
+    pass

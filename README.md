@@ -5,7 +5,7 @@
 [![PyPi Package](https://img.shields.io/pypi/v/max30105.svg)](https://pypi.python.org/pypi/max30105)
 [![Python Versions](https://img.shields.io/pypi/pyversions/max30105.svg)](https://pypi.python.org/pypi/max30105)
 
-The MAX30105 is an precision optical sensor that can be used to measure heart rate, pulse oximetry (SPO2 / blood oxygen sauration), and smoke (and other particles).
+The MAX30105 is an precision optical sensor that can be used to measure heart rate, pulse oximetry (SPO2 / blood oxygen saturation), and smoke (and other particles).
 
 # Installing
 
