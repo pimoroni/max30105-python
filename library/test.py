@@ -21,12 +21,14 @@ hr = HeartRate(max30105)
 
 try:
     print("Temperature: {:.2f}C".format(max30105.get_temperature()))
+
     for c in colours:
         print("\nLighting {} LED".format(c.upper()))
         max30105.set_led_pulse_amplitude(colours[c], 12.5)
-        time.sleep(2.5)
+        time.sleep(0.5)
         print("Reading {} LED".format(c.upper()))
         i = 0
+
         while i < 10:
             samples = max30105.get_samples()
             if samples is not None:
@@ -35,7 +37,9 @@ try:
                 print(d)
                 time.sleep(0.1)
                 i += 1
+
         max30105.set_led_pulse_amplitude(colours[c], 0.0)
+
     print("\nTEST COMPLETE!!!")
 
 except KeyboardInterrupt:
