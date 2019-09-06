@@ -34,7 +34,7 @@ class LEDModeAdapter(Adapter):
         try:
             return self.LOOKUP.index(value)
         except ValueError:
-            return 0
+            raise ValueError('Invalid slot mode {}'.format(value))
 
 
 class PulseAmplitudeAdapter(Adapter):
@@ -303,7 +303,7 @@ class MAX30105:
             ), bit_width=16)
         ))
 
-    def setup(self, led_power=6.4, sample_average=4, leds_enable=3, sample_rate=400, pulse_width=215, adc_range=16384):
+    def setup(self, led_power=6.4, sample_average=4, leds_enable=3, sample_rate=400, pulse_width=215, adc_range=16384, timeout=5.0):
         """Set up the sensor."""
         if self._is_setup:
             return
@@ -313,62 +313,55 @@ class MAX30105:
 
         self._max30105.select_address(self._i2c_addr)
 
-        self.soft_reset()
+        self.soft_reset(timeout=timeout)
 
-        with self._max30105.FIFO_CONFIG as FIFO_CONFIG:
-            # Average over 4 samples (the default value)
-            FIFO_CONFIG.set_sample_average(sample_average)
-            # Enable sample rollover
-            FIFO_CONFIG.set_fifo_rollover_en(True)
-            FIFO_CONFIG.write()
+        self._max30105.set('FIFO_CONFIG',
+                           sample_average=sample_average,
+                           fifo_rollover_en=True)
 
-        with self._max30105.SPO2_CONFIG as SPO2_CONFIG:
-            # Set the sample rate to 50 samples per second
-            SPO2_CONFIG.set_sample_rate_sps(sample_rate)
-            # And the ADC range to 16384
-            SPO2_CONFIG.set_adc_range_nA(adc_range)
-            # And the pulse width to 411us
-            SPO2_CONFIG.set_led_pw_us(pulse_width)
-            SPO2_CONFIG.write()
+        self._max30105.set('SPO2_CONFIG',
+                           sample_rate_sps=sample_rate,
+                           adc_range_nA=adc_range,
+                           led_pw_us=pulse_width)
 
-        with self._max30105.LED_PULSE_AMPLITUDE as LPA:
-            LPA.set_led1_mA(led_power)
-            LPA.set_led2_mA(led_power)
-            LPA.set_led3_mA(led_power)
-            LPA.write()
+        self._max30105.set('LED_PULSE_AMPLITUDE',
+                           led1_mA=led_power,
+                           led2_mA=led_power,
+                           led3_mA=led_power)
 
-        self._max30105.LED_PROX_PULSE_AMPLITUDE.set_pilot_mA(led_power)
+        self._max30105.set('LED_PROX_PULSE_AMPLITUDE', pilot_mA=led_power)
 
         # Set the LED mode based on the number of LEDs we want enabled
-        self._max30105.MODE_CONFIG.set_mode(['red_only', 'red_ir', 'green_red_ir'][leds_enable - 1])
+        self._max30105.set('MODE_CONFIG',
+                           mode=['red_only', 'red_ir', 'green_red_ir'][leds_enable - 1])
 
         # Set up the LEDs requested in sequential slots
-        with self._max30105.LED_MODE_CONTROL as LMC:
-            LMC.set_slot1('red')
-            if leds_enable >= 2:
-                LMC.set_slot2('ir')
-            if leds_enable >= 3:
-                LMC.set_slot3('green')
-            LMC.write()
+        self._max30105.set('LED_MODE_CONTROL',
+                           slot1='red',
+                           slot2='ir' if leds_enable >= 2 else 'off',
+                           slot3='green' if leds_enable >= 3 else 'off')
 
         self.clear_fifo()
 
-    def soft_reset(self):
+    def soft_reset(self, timeout=5.0):
         """Reset device."""
-        self._max30105.MODE_CONFIG.set_reset(True)
-        while self._max30105.MODE_CONFIG.get_reset():
+        self._max30105.set('MODE_CONFIG', reset=True)
+        t_start = time.time()
+        while self._max30105.get('MODE_CONFIG').reset and time.time() - t_start < timeout:
             time.sleep(0.001)
+        if self._max30105.get('MODE_CONFIG').reset:
+            raise RuntimeError("Timeout: Failed to soft reset MAX30105.")
 
     def clear_fifo(self):
         """Clear samples FIFO."""
-        self._max30105.FIFO_READ.set_pointer(0)
-        self._max30105.FIFO_WRITE.set_pointer(0)
-        self._max30105.FIFO_OVERFLOW.set_counter(0)
+        self._max30105.set('FIFO_READ', pointer=0)
+        self._max30105.set('FIFO_WRITE', pointer=0)
+        self._max30105.set('FIFO_OVERFLOW', counter=0)
 
     def get_samples(self):
         """Return contents of sample FIFO."""
-        ptr_r = self._max30105.FIFO_READ.get_pointer()
-        ptr_w = self._max30105.FIFO_WRITE.get_pointer()
+        ptr_r = self._max30105.get('FIFO_READ').pointer
+        ptr_w = self._max30105.get('FIFO_WRITE').pointer
 
         if ptr_r == ptr_w:
             return None
@@ -397,20 +390,22 @@ class MAX30105:
         """Return the revision and part IDs."""
         self.setup()
 
-        revision = self._max30105.PART_ID.get_revision()
-        part = self._max30105.PART_ID.get_part()
+        part_id = self._max30105.get('PART_ID')
 
-        return revision, part
+        return part_id.revision, part_id.part
 
-    def get_temperature(self):
+    def get_temperature(self, timeout=5.0):
         """Return the die temperature."""
         self.setup()
 
-        self._max30105.DIE_TEMP_CONFIG.set_temp_en(True)
-        self._max30105.INT_ENABLE_2.set_die_temp_ready_en(True)
-        while not self._max30105.INT_STATUS_2.get_die_temp_ready():
+        self._max30105.set('DIE_TEMP_CONFIG', temp_en=True)
+        self._max30105.set('INT_ENABLE_2', die_temp_ready_en=True)
+        t_start = time.time()
+        while not self._max30105.get('INT_STATUS_2').die_temp_ready and time.time() - t_start < timeout:
             time.sleep(0.01)
-        return self._max30105.DIE_TEMP.get_temperature()
+        if not self._max30105.get('INT_STATUS_2').die_temp_ready:
+            raise RuntimeError('Timeout: Waiting for INT_STATUS_2, die_temp_ready.')
+        return self._max30105.get('DIE_TEMP').temperature
 
     def set_mode(self, mode):
         """Set the sensor mode.
@@ -418,7 +413,7 @@ class MAX30105:
         :param mode: Mode, either red_only, red_ir or green_red_ir
 
         """
-        self._max30105.MODE_CONFIG.set_mode(mode)
+        self._max30105.set('MODE_CONFIG', mode=mode)
 
     def set_slot_mode(self, slot, mode):
         """Set the mode of a single slot.
@@ -428,13 +423,13 @@ class MAX30105:
 
         """
         if slot == 1:
-            self._max30105.LED_MODE_CONTROL.set_slot1(mode)
+            self._max30105.set('LED_MODE_CONTROL', slot1=mode)
         elif slot == 2:
-            self._max30105.LED_MODE_CONTROL.set_slot2(mode)
+            self._max30105.set('LED_MODE_CONTROL', slot2=mode)
         elif slot == 3:
-            self._max30105.LED_MODE_CONTROL.set_slot3(mode)
+            self._max30105.set('LED_MODE_CONTROL', slot3=mode)
         elif slot == 4:
-            self._max30105.LED_MODE_CONTROL.set_slot4(mode)
+            self._max30105.set('LED_MODE_CONTROL', slot4=mode)
         else:
             raise ValueError("Invalid LED slot: {}".format(slot))
 
@@ -446,11 +441,11 @@ class MAX30105:
 
         """
         if led == 1:
-            self._max30105.LED_PULSE_AMPLITUDE.set_led1_mA(amplitude)
+            self._max30105.set('LED_PULSE_AMPLITUDE', led1_mA=amplitude)
         elif led == 2:
-            self._max30105.LED_PULSE_AMPLITUDE.set_led2_mA(amplitude)
+            self._max30105.set('LED_PULSE_AMPLITUDE', led2_mA=amplitude)
         elif led == 3:
-            self._max30105.LED_PULSE_AMPLITUDE.set_led3_mA(amplitude)
+            self._max30105.set('LED_PULSE_AMPLITUDE', led3_mA=amplitude)
         else:
             raise ValueError("Invalid LED: {}".format(led))
 
@@ -460,23 +455,23 @@ class MAX30105:
         :param count: Count of remaining samples, from 0 to 15
 
         """
-        self._max30105.FIFO_CONFIG.set_fifo_almost_full(count)
+        self._max30105.set('FIFO_CONFIG', fifo_almost_full=count)
 
     def set_fifo_almost_full_enable(self, value):
         """Enable the FIFO-almost-full flag."""
-        self._max30105.INT_ENABLE_1.set_a_full_en(value)
+        self._max30105.set('INT_ENABLE_1', a_full_en=value)
 
     def set_data_ready_enable(self, value):
         """Enable the data-ready flag."""
-        self._max30105.INT_ENABLE_1.set_data_ready_en(value)
+        self._max30105.set('INT_ENABLE_1', data_ready_en=value)
 
     def set_ambient_light_compensation_overflow_enable(self, value):
         """Enable the ambient light compensation overflow flag."""
-        self._max30105.INT_ENABLE_1.set_alc_overflow_en(value)
+        self._max30105.set('INT_ENABLE_1', alc_overflow_en=value)
 
     def set_proximity_enable(self, value):
         """Enable the proximity interrupt flag."""
-        self._max30105.INT_ENABLE_1.set_prox_int_en(value)
+        self._max30105.set('INT_ENABLE_1', prox_int_en=value)
 
     def set_proximity_threshold(self, value):
         """Set the threshold of the proximity sensor.
@@ -486,7 +481,7 @@ class MAX30105:
         :param value: threshold value from 0 to 255
 
         """
-        self._max30105.PROX_INT_THRESHOLD.set_threshold(value)
+        self._max30105.set('PROX_INT_THRESHOLD', threshold=value)
 
     def get_fifo_almost_full_status(self):
         """Get the FIFO-almost-full flag.
@@ -496,7 +491,7 @@ class MAX30105:
         The flag is cleared upon read.
 
         """
-        return self._max30105.INT_STATUS_1.get_a_full()
+        return self._max30105.get('INT_STATUS_1').a_full
 
     def get_data_ready_status(self):
         """Get the data-ready flag.
@@ -506,7 +501,7 @@ class MAX30105:
         This flag is cleared upon read, or upon `get_samples()`
 
         """
-        return self._max30105.INT_STATUS_1.get_data_ready()
+        return self._max30105.get('INT_STATUS_1').data_ready
 
     def get_ambient_light_compensation_overflow_status(self):
         """Get the ambient light compensation overflow status flag.
@@ -516,7 +511,7 @@ class MAX30105:
         This flag is cleared upon read.
 
         """
-        return self._max30105.INT_STATUS_1.get_data_ready()
+        return self._max30105.get('INT_STATUS_1').alc_overflow
 
     def get_proximity_triggered_threshold_status(self):
         """Get the proximity triggered threshold status flag.
@@ -526,7 +521,7 @@ class MAX30105:
         This flag is cleared upon read.
 
         """
-        return self._max30105.INT_STATUS_1.get_prox_int()
+        return self._max30105.get('INT_STATUS_1').prox_int
 
     def get_power_ready_status(self):
         """Get the power ready status flag.
@@ -534,7 +529,7 @@ class MAX30105:
         Returns True if the sensor has successfully powered up and is ready to collect data.
 
         """
-        return self._max30105.INT_STATUS_1.get_pwr_ready()
+        return self._max30105.get('INT_STATUS_1').pwr_ready
 
     def get_die_temp_ready_status(self):
         """Get the die temperature ready flag.
@@ -544,4 +539,4 @@ class MAX30105:
         This flag is cleared upon read, or upon `get_temperature`.
 
         """
-        return self._max30105.INT_STATUS_2.get_die_temp_ready()
+        return self._max30105.get('INT_STATUS_2').die_temp_ready
