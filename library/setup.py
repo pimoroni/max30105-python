@@ -39,7 +39,7 @@ classifiers = ['Development Status :: 4 - Beta',
 
 setup(
     name='max30105',
-    version='0.0.2',
+    version='0.0.3',
     author='Philip Howard',
     author_email='phil@pimoroni.com',
     description="""Python library for the MAX30105 Smoke/Pulse Detector""",

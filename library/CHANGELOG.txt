@@ -1,3 +1,8 @@
+0.0.3
+-----
+
+* Bugfix: support 0 init value of MODE_CONFIG register
+
 0.0.2
 -----
 
