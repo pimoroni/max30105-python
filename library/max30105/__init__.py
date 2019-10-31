@@ -247,6 +247,7 @@ class MAX30105:
                 BitField('shutdown', 0b10000000),
                 BitField('reset', 0b01000000),
                 BitField('mode', 0b00000111, adapter=LookupAdapter({
+                    'none': 0b00,
                     'red_only': 0b010,
                     'red_ir': 0b011,
                     'green_red_ir': 0b111
