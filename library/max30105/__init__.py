@@ -84,6 +84,8 @@ class SampleAdapter(Adapter):
         return struct.unpack('<LLL', b)
 
 
+# HeartRate processing adapted from:
+# https://github.com/sparkfun/SparkFun_MAX3010x_Sensor_Library/blob/master/examples/Example5_HeartRate/
 class HeartRate:
     def __init__(self, max30105):
         """Initialise HeartRate detector.
