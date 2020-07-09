@@ -26,6 +26,17 @@ def test_get_temperature():
     assert max30105.get_temperature() == 0
 
 
+def test_get_temperature_timeout():
+    from max30105 import MAX30105
+    max30105 = MAX30105(i2c_dev=MockSMBusNoTimeout(1, default_registers={
+        0x01: 0b00000000,  # Die temp NOT ready
+        0x09: 0b00000111   # Hard default value to avoid error
+    }))
+
+    with pytest.raises(RuntimeError):
+        max30105.get_temperature()
+
+
 def test_get_status():
     from max30105 import MAX30105
     max30105 = MAX30105(i2c_dev=MockSMBusNoTimeout(1, default_registers={
