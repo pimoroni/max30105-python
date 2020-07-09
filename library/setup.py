@@ -49,5 +49,5 @@ setup(
     url='http://www.pimoroni.com',
     classifiers=classifiers,
     packages=['max30105'],
-    install_requires=['i2cdevice>=0.0.6']
+    install_requires=['i2cdevice>=0.0.7']
 )

@@ -298,7 +298,7 @@ class MAX30105:
                 BitField('temperature', 0xffff, adapter=TemperatureAdapter()),
             ), bit_width=16),
             Register('DIE_TEMP_CONFIG', 0x21, fields=(
-                BitField('temp_en', 0b00000001),
+                BitField('temp_en', bit(0)),
             )),
             Register('PROX_INT_THRESHOLD', 0x30, fields=(
                 BitField('threshold', 0xff),
@@ -404,13 +404,15 @@ class MAX30105:
         """Return the die temperature."""
         self.setup()
 
-        self._max30105.set('DIE_TEMP_CONFIG', temp_en=True)
         self._max30105.set('INT_ENABLE_2', die_temp_ready_en=True)
+        self._max30105.set('DIE_TEMP_CONFIG', temp_en=True)
         t_start = time.time()
-        while not self._max30105.get('INT_STATUS_2').die_temp_ready and time.time() - t_start < timeout:
+
+        while not self._max30105.get('INT_STATUS_2').die_temp_ready:
             time.sleep(0.01)
-        if not self._max30105.get('INT_STATUS_2').die_temp_ready:
-            raise RuntimeError('Timeout: Waiting for INT_STATUS_2, die_temp_ready.')
+            if time.time() - t_start > timeout:
+                raise RuntimeError('Timeout: Waiting for INT_STATUS_2, die_temp_ready.')
+
         return self._max30105.get('DIE_TEMP').temperature
 
     def set_mode(self, mode):
