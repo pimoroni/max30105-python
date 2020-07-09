@@ -1,3 +1,8 @@
+0.0.4
+-----
+
+* Bugfix: fix timeout bug in get_temperature(), requires i2cdevice>=0.0.7
+
 0.0.3
 -----
 
