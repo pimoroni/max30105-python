@@ -1,3 +1,8 @@
+0.0.5
+-----
+
+* Bugfix: fix off-by-one error in sample average bitmask
+
 0.0.4
 -----
 

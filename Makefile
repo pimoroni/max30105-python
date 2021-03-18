@@ -36,12 +36,14 @@ check:
 tag:
 	git tag -a "v${LIBRARY_VERSION}" -m "Version ${LIBRARY_VERSION}"
 
-python-readme: library/README.rst
+python-readme: library/README.md
 
 python-license: library/LICENSE.txt
 
-library/README.rst: README.md
-	pandoc --from=markdown --to=rst -o library/README.rst README.md
+library/README.md: README.md library/CHANGELOG.txt
+	cp README.md library/README.md
+	printf "\n# Changelog\n\n" >> library/README.md
+	cat library/CHANGELOG.txt >> library/README.
 
 library/LICENSE.txt: LICENSE
 	cp LICENSE library/LICENSE.txt
