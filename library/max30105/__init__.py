@@ -234,7 +234,7 @@ class MAX30105:
                 BitField('pointer', 0b00011111),
             )),
             Register('FIFO_CONFIG', 0x08, fields=(
-                BitField('sample_average', 0b111000000, adapter=LookupAdapter({
+                BitField('sample_average', 0b11100000, adapter=LookupAdapter({
                     1: 0b000,
                     2: 0b001,
                     4: 0b010,
